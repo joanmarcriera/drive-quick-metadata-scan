@@ -30,20 +30,50 @@ pip install -r requirements.txt
 pip install .
 ```
 
-## Google API setup
+## Google API and OAuth setup
 
-1. Enable Google Drive API in Google Cloud Console.
-2. Create OAuth Desktop credentials.
-3. Download `credentials.json`.
-4. Run scan:
+Follow the official Google Drive quickstart flow for desktop OAuth apps:
+
+- [Google Drive API Python quickstart](https://developers.google.com/workspace/drive/api/quickstart/python)
+
+### 1) Create or select a Google Cloud project
+
+- Open [Google Cloud Console](https://console.cloud.google.com/)
+- Select an existing project or create a new one
+
+### 2) Enable the Google Drive API
+
+- Open the API page directly: [Google Drive API in API Library](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+- Click `Enable` (or `Manage` if already enabled)
+
+### 3) Configure OAuth consent
+
+- Open [Google Auth Platform](https://console.cloud.google.com/auth)
+- Configure app details (name, support email, developer contact)
+- Choose audience:
+  - `Internal` for Google Workspace org-only usage
+  - `External` for personal Gmail/multi-user usage
+- If using `External` in testing mode, add your account under test users
+
+### 4) Create Desktop OAuth client credentials
+
+- Open [Credentials page](https://console.cloud.google.com/apis/credentials)
+- Click `Create credentials` -> `OAuth client ID`
+- Application type: `Desktop app`
+- Download the JSON file
+- Save it as `credentials.json` in your project root (or any path you prefer)
+
+### 5) Run the first scan and complete OAuth login
 
 ```bash
 gdrive-dedupe scan --credentials /path/to/credentials.json
 ```
 
-OAuth token is stored in:
+On first run, the tool opens a browser for consent. After approval, the local token is stored at:
 
-`~/.config/gdrive-dedupe/token.json`
+- `~/.config/gdrive-dedupe/token.json`
+
+If you change scopes or OAuth client, delete that token file and authenticate again.
 
 ## Usage
 
