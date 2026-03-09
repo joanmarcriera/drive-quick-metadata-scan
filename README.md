@@ -10,7 +10,7 @@ It detects both duplicate files and duplicate folder trees without downloading f
 - Detects duplicate files by MD5 checksum
 - Detects duplicate folders via deterministic bottom-up tree hashing
 - Supports resumable scans
-- Produces CLI tables and HTML reports
+- Produces CLI tables and HTML reports with Google Drive links for manual review
 
 ## Architecture
 
@@ -106,6 +106,17 @@ Optional shared-drive scan:
 gdrive-dedupe scan --drive-id <DRIVE_ID>
 ```
 
+## Review workflow (no CLI deletion)
+
+`gdrive-dedupe` is intentionally non-destructive. It does not delete files/folders from the command line.
+
+Recommended workflow:
+
+1. Run `gdrive-dedupe report --output report.html`
+2. Open the generated report in your browser
+3. Use `Open file in Drive` / `Open folder in Drive` links to inspect duplicates
+4. Decide and delete manually in Google Drive UI
+
 ## Database schema
 
 ```sql
@@ -148,6 +159,9 @@ Folders with identical hash values are duplicates of the same tree shape/content
 - Avoids loading all files/folders into RAM
 - Uses WAL-mode SQLite for better write/read concurrency
 - Supports thread workers for folder hash computation
+- Real scan example from a user drive:
+  - `Scanning metadata: 489742items [23:48, 342.79items/s]`
+  - `Scan complete. Items scanned: 489742`
 
 ## Security considerations
 
