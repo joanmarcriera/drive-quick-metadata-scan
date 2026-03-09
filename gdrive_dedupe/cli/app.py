@@ -207,6 +207,13 @@ def report(
     db: Annotated[Path, typer.Option(help="SQLite metadata DB path")] = DEFAULT_DB_PATH,
     output: Annotated[Path, typer.Option(help="HTML output path")] = DEFAULT_REPORT_PATH,
     limit: Annotated[int, typer.Option(min=1, help="Max duplicate groups per section")] = 100,
+    actionable_candidates: Annotated[
+        int,
+        typer.Option(
+            min=0,
+            help=("Delete-candidate links per actionable root in HTML report " "(0 = show all)"),
+        ),
+    ] = 25,
     recompute: Annotated[
         bool,
         typer.Option(
@@ -226,7 +233,15 @@ def report(
         hashed = engine.compute_all(workers=workers)
         console.print(f"Computed hashes for {hashed} folders.")
 
-    output_file = generate_html_report(database, output_path=output, limit_per_section=limit)
+    candidate_sample_size: int | None = (
+        None if actionable_candidates == 0 else actionable_candidates
+    )
+    output_file = generate_html_report(
+        database,
+        output_path=output,
+        limit_per_section=limit,
+        actionable_candidates_per_group=candidate_sample_size,
+    )
     console.print(f"[green]Report generated:[/green] {output_file}")
 
 

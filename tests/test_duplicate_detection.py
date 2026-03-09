@@ -146,3 +146,42 @@ def test_actionable_recommendations_sorted_and_paginated(tmp_path: Path) -> None
     page_2 = get_actionable_root_recommendations(db, limit=1, offset=1, min_reclaimable_bytes=1)
     assert len(page_2) == 1
     assert page_2[0].hash_value == "hash_small"
+
+
+def test_actionable_root_groups_ignore_nested_descendant_duplicates(tmp_path: Path) -> None:
+    db = Database(tmp_path / "nested_descendant_duplicates.db")
+    db.initialize()
+
+    db.upsert_folders(
+        [
+            ("root_a", None, "root_a"),
+            ("mid_a", "root_a", "mid_a"),
+            ("leaf_a", "mid_a", "leaf"),
+            ("root_b", None, "root_b"),
+            ("mid_b", "root_b", "mid_b"),
+            ("leaf_b", "mid_b", "leaf"),
+        ]
+    )
+    db.upsert_files(
+        [
+            ("x1", "video.mov", "leaf_a", 1000, "mleaf", "video/quicktime"),
+            ("x2", "video.mov", "leaf_b", 1000, "mleaf", "video/quicktime"),
+        ]
+    )
+    db.executemany(
+        "INSERT INTO folder_hash(folder_id, hash) VALUES(?, ?)",
+        [
+            ("root_a", "h_root"),
+            ("root_b", "h_root"),
+            ("mid_a", "h_mid_a"),
+            ("mid_b", "h_mid_b"),
+            ("leaf_a", "h_leaf"),
+            ("leaf_b", "h_leaf"),
+        ],
+    )
+    db.commit()
+
+    groups = get_actionable_duplicate_root_groups(db)
+    assert len(groups) == 1
+    assert groups[0].hash_value == "h_root"
+    assert {f.id for f in groups[0].folders} == {"root_a", "root_b"}

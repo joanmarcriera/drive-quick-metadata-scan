@@ -123,6 +123,12 @@ Filter out small savings:
 gdrive-dedupe duplicates waste --min-reclaimable 2GB --limit 20
 ```
 
+Generate an HTML report with all candidate links for actionable duplicate roots:
+
+```bash
+gdrive-dedupe report --output report.html --actionable-candidates 0
+```
+
 ## Review workflow (no CLI deletion)
 
 `gdrive-dedupe` is intentionally non-destructive. It does not delete files/folders from the command line.
@@ -132,6 +138,7 @@ Recommended workflow:
 1. Run `gdrive-dedupe report --output report.html`
 2. Open the generated report in your browser
 3. Start with `Actionable Duplicate Roots` (top-level duplicate sets) to remove noise
+   - Nested duplicate descendants are suppressed so you only review root duplicate folders
 4. Review `Folder Size Hotspots` and `File Count Hotspots` for high-impact cleanup
 5. Check `Repository Metadata Hotspots (.git)` for repo artifacts to remove
 6. Use `Open file in Drive` / `Open folder in Drive` links to inspect duplicates

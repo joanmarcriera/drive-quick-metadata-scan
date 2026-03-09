@@ -51,6 +51,7 @@ def generate_html_report(
     limit_per_section: int = 100,
     file_samples_per_group: int = 8,
     folder_samples_per_group: int = 8,
+    actionable_candidates_per_group: int | None = 25,
 ) -> Path:
     stats = collect_stats(database)
     duplicate_files = get_duplicate_file_groups(database, limit=limit_per_section)
@@ -94,7 +95,7 @@ def generate_html_report(
         subtree_stats_by_folder=subtree_stats_by_folder,
         folder_cache=folder_cache,
         path_cache=path_cache,
-        sample_size=folder_samples_per_group,
+        sample_size=actionable_candidates_per_group,
         max_groups=limit_per_section,
     )
 
@@ -447,7 +448,7 @@ def _render_actionable_root_groups(
     subtree_stats_by_folder: dict[str, FolderSubtreeStats],
     folder_cache: dict[str, FolderNode | None],
     path_cache: dict[str, str],
-    sample_size: int,
+    sample_size: int | None,
     max_groups: int | None,
 ) -> str:
     if not groups:
@@ -491,7 +492,10 @@ def _render_actionable_root_groups(
     parts: list[str] = []
     for estimated_reclaimable, group, keep_folder, keep_path in ranked_groups:
         delete_candidates = [folder for folder in group.folders if folder.id != keep_folder.id]
-        sampled_delete_candidates = delete_candidates[:sample_size]
+        if sample_size is None:
+            sampled_delete_candidates = delete_candidates
+        else:
+            sampled_delete_candidates = delete_candidates[:sample_size]
         delete_candidates_html = "\n".join(
             _render_delete_candidate(
                 database,

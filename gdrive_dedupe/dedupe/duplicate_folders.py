@@ -114,11 +114,33 @@ def get_actionable_duplicate_root_groups(
         members_by_hash.setdefault(hash_value, []).append(folder)
         duplicate_ids.add(folder.id)
 
+    parent_by_id = {
+        str(row["id"]): (str(row["parent"]) if row["parent"] is not None else None)
+        for row in database.execute("SELECT id, parent FROM folders").fetchall()
+    }
+    has_duplicate_ancestor_cache: dict[str, bool] = {}
+
+    def has_duplicate_ancestor(folder_id: str) -> bool:
+        if folder_id in has_duplicate_ancestor_cache:
+            return has_duplicate_ancestor_cache[folder_id]
+
+        cursor = parent_by_id.get(folder_id)
+        seen: set[str] = set()
+        while cursor is not None and cursor not in seen:
+            if cursor in duplicate_ids:
+                has_duplicate_ancestor_cache[folder_id] = True
+                return True
+            seen.add(cursor)
+            cursor = parent_by_id.get(cursor)
+
+        has_duplicate_ancestor_cache[folder_id] = False
+        return False
+
     actionable_groups: list[ActionableDuplicateRootGroup] = []
     for hash_value, members in members_by_hash.items():
-        # Collapse nested duplicate noise: keep only folders whose parent is not
-        # itself part of any duplicate folder group.
-        top_level_members = [folder for folder in members if folder.parent not in duplicate_ids]
+        # Collapse nested duplicate noise: keep only folders that do not have
+        # any duplicate ancestor in the folder tree.
+        top_level_members = [folder for folder in members if not has_duplicate_ancestor(folder.id)]
         if len(top_level_members) < 2:
             continue
 
