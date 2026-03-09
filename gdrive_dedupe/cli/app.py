@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import webbrowser
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -29,6 +31,11 @@ DEFAULT_DB_PATH = Path.home() / ".config" / "gdrive-dedupe" / "metadata.db"
 DEFAULT_CREDENTIALS_PATH = Path("credentials.json")
 DEFAULT_REPORT_PATH = Path("report.html")
 GOOGLE_DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/{item_id}"
+
+
+class BrowserOpenMode(StrEnum):
+    tabs = "tabs"
+    windows = "windows"
 
 
 @app.command()
@@ -139,6 +146,20 @@ def duplicates_waste(
     sample_candidates: Annotated[
         int, typer.Option(min=1, max=10, help="Candidate folders shown per row")
     ] = 3,
+    interactive: Annotated[
+        bool,
+        typer.Option(
+            "--interactive/--no-interactive",
+            help="Interactive review loop (largest duplicate roots first)",
+        ),
+    ] = False,
+    open_links: Annotated[
+        int, typer.Option(min=1, max=20, help="Links to open per interactive action")
+    ] = 5,
+    open_mode: Annotated[
+        BrowserOpenMode,
+        typer.Option(case_sensitive=False, help="Open links as browser tabs or windows"),
+    ] = BrowserOpenMode.windows,
 ) -> None:
     database = Database(db)
     database.initialize()
@@ -149,9 +170,10 @@ def duplicates_waste(
         console.print(f"Computed hashes for {hashed} folders.")
 
     min_reclaimable_bytes = _parse_size_to_bytes(min_reclaimable)
+    recommendation_limit = None if interactive else limit
     recommendations = get_actionable_root_recommendations(
         database,
-        limit=limit,
+        limit=recommendation_limit,
         offset=offset,
         min_reclaimable_bytes=min_reclaimable_bytes,
     )
@@ -161,6 +183,17 @@ def duplicates_waste(
 
     folder_map = _load_folder_map(database)
     path_cache: dict[str, str] = {}
+
+    if interactive:
+        _run_interactive_waste_review(
+            recommendations,
+            offset=offset,
+            folder_map=folder_map,
+            path_cache=path_cache,
+            open_links=open_links,
+            open_mode=open_mode,
+        )
+        return
 
     table = Table(title="Duplicate Waste Ranking (Largest First)")
     table.add_column("#", justify="right")
@@ -343,6 +376,142 @@ def _resolve_folder_path(
         path_cache[lineage_folder_id] = prefix
 
     return path_cache.get(folder_id, f"/{folder_id}")
+
+
+def _run_interactive_waste_review(
+    recommendations: list,
+    *,
+    offset: int,
+    folder_map: dict[str, tuple[str | None, str]],
+    path_cache: dict[str, str],
+    open_links: int,
+    open_mode: BrowserOpenMode,
+) -> None:
+    total = len(recommendations)
+    cursor = 0
+    console.print(
+        "Interactive mode: largest reclaimable duplicate roots first. "
+        "Actions: [bold]o[/bold]=open keep + delete links, "
+        "[bold]d[/bold]=open delete links only, [bold]k[/bold]=open keep link, "
+        "[bold]n[/bold]=next, [bold]p[/bold]=previous, [bold]q[/bold]=quit."
+    )
+
+    while 0 <= cursor < total:
+        recommendation = recommendations[cursor]
+        row_number = offset + cursor + 1
+        _print_interactive_recommendation(
+            row_number=row_number,
+            recommendation=recommendation,
+            folder_map=folder_map,
+            path_cache=path_cache,
+            open_links=open_links,
+        )
+
+        action = typer.prompt("Action", default="n").strip().lower()
+
+        if action == "q":
+            break
+        if action == "n":
+            cursor = min(cursor + 1, total - 1)
+            continue
+        if action == "p":
+            cursor = max(cursor - 1, 0)
+            continue
+
+        if action in {"o", "d", "k"}:
+            include_keep = action in {"o", "k"}
+            include_deletes = action in {"o", "d"}
+            urls = _build_review_urls(
+                recommendation,
+                include_keep=include_keep,
+                include_delete_candidates=include_deletes,
+                delete_limit=open_links,
+            )
+            if not urls:
+                console.print("[yellow]No links available for this selection.[/yellow]")
+                continue
+            _open_urls(urls, open_mode=open_mode)
+            console.print(
+                f"[green]Opened {len(urls)} link(s) in browser ({open_mode.value}).[/green]"
+            )
+            continue
+
+        if action.startswith("j "):
+            jump_raw = action[2:].strip()
+            if jump_raw.isdigit():
+                jump_index = int(jump_raw) - 1 - offset
+                if 0 <= jump_index < total:
+                    cursor = jump_index
+                    continue
+            console.print("[yellow]Invalid jump target. Use: j <rank_number>[/yellow]")
+            continue
+
+        console.print("[yellow]Unknown action. Use o/d/k/n/p/q or j <rank_number>.[/yellow]")
+
+
+def _print_interactive_recommendation(
+    *,
+    row_number: int,
+    recommendation,
+    folder_map: dict[str, tuple[str | None, str]],
+    path_cache: dict[str, str],
+    open_links: int,
+) -> None:
+    keep_path = _resolve_folder_path(recommendation.keep.id, folder_map, path_cache)
+    keep_url = GOOGLE_DRIVE_FOLDER_URL.format(item_id=recommendation.keep.id)
+    console.rule(f"Rank #{row_number} - {format_bytes(recommendation.estimated_reclaimable_bytes)}")
+    console.print(f"Copies: {recommendation.copies}")
+    console.print(f"Keep: {recommendation.keep.id} - {keep_path}")
+    console.print(f"Keep Link: {keep_url}")
+
+    preview = recommendation.delete_candidates[:open_links]
+    if not preview:
+        console.print("Delete candidates: none")
+        return
+
+    candidate_table = Table(title=f"Delete Candidates (showing first {len(preview)})")
+    candidate_table.add_column("#", justify="right")
+    candidate_table.add_column("Folder")
+    candidate_table.add_column("Drive Link")
+    for idx, candidate in enumerate(preview, start=1):
+        candidate_path = _resolve_folder_path(candidate.id, folder_map, path_cache)
+        candidate_url = GOOGLE_DRIVE_FOLDER_URL.format(item_id=candidate.id)
+        candidate_table.add_row(
+            str(idx),
+            f"{candidate.id} - {candidate_path}",
+            candidate_url,
+        )
+    remaining = len(recommendation.delete_candidates) - len(preview)
+    if remaining > 0:
+        candidate_table.caption = (
+            f"... and {remaining} more delete candidate(s). "
+            f"Increase --open-links to include more."
+        )
+    console.print(candidate_table)
+
+
+def _build_review_urls(
+    recommendation,
+    *,
+    include_keep: bool,
+    include_delete_candidates: bool,
+    delete_limit: int,
+) -> list[str]:
+    urls: list[str] = []
+    if include_keep:
+        urls.append(GOOGLE_DRIVE_FOLDER_URL.format(item_id=recommendation.keep.id))
+    if include_delete_candidates:
+        for candidate in recommendation.delete_candidates[:delete_limit]:
+            urls.append(GOOGLE_DRIVE_FOLDER_URL.format(item_id=candidate.id))
+    return urls
+
+
+def _open_urls(urls: list[str], *, open_mode: BrowserOpenMode) -> None:
+    for url in urls:
+        if open_mode == BrowserOpenMode.windows:
+            webbrowser.open_new(url)
+        else:
+            webbrowser.open_new_tab(url)
 
 
 def main() -> None:

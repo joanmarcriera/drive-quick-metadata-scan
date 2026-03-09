@@ -123,6 +123,12 @@ Filter out small savings:
 gdrive-dedupe duplicates waste --min-reclaimable 2GB --limit 20
 ```
 
+Interactive cleanup review (largest duplicate roots first), opening up to 5 Drive folders at once:
+
+```bash
+gdrive-dedupe duplicates waste --interactive --open-links 5 --open-mode windows
+```
+
 Generate an HTML report with all candidate links for actionable duplicate roots:
 
 ```bash
@@ -236,6 +242,9 @@ gdrive-dedupe duplicates waste [OPTIONS]
 - `--offset INTEGER` Row offset for pagination (`>=0`). Default: `0`
 - `--min-reclaimable TEXT` Threshold like `500MB`, `2GB`, `0`. Default: `1MB`
 - `--sample-candidates INTEGER` Candidate folders per row (`1..10`). Default: `3`
+- `--interactive / --no-interactive` Start interactive ranking review loop. Default: `--no-interactive`
+- `--open-links INTEGER` Links opened per interactive action (`1..20`). Default: `5`
+- `--open-mode [tabs|windows]` Browser open target style. Default: `windows`
 - `--help`
 
 ## Review workflow (no CLI deletion)
@@ -252,6 +261,16 @@ Recommended workflow:
 5. Check `Repository Metadata Hotspots (.git)` for repo artifacts to remove
 6. Use `Open file in Drive` / `Open folder in Drive` links to inspect duplicates
 7. Decide and delete manually in Google Drive UI
+
+Interactive shortcuts (`gdrive-dedupe duplicates waste --interactive`):
+
+- `o`: open keep folder + top delete candidates in browser
+- `d`: open only delete-candidate folders in browser
+- `k`: open only keep folder in browser
+- `n`: next ranked candidate
+- `p`: previous ranked candidate
+- `j <rank>`: jump to a rank number
+- `q`: quit interactive mode
 
 ## Database schema
 
