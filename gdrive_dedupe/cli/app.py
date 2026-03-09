@@ -118,9 +118,25 @@ def report(
     db: Annotated[Path, typer.Option(help="SQLite metadata DB path")] = DEFAULT_DB_PATH,
     output: Annotated[Path, typer.Option(help="HTML output path")] = DEFAULT_REPORT_PATH,
     limit: Annotated[int, typer.Option(min=1, help="Max duplicate groups per section")] = 100,
+    recompute: Annotated[
+        bool,
+        typer.Option(
+            "--recompute/--no-recompute",
+            help="Recompute folder hashes before generating report",
+        ),
+    ] = True,
+    workers: Annotated[
+        int, typer.Option(min=1, max=16, help="Worker threads for folder hash computation")
+    ] = 1,
 ) -> None:
     database = Database(db)
     database.initialize()
+
+    if recompute:
+        engine = FolderHashEngine(database)
+        hashed = engine.compute_all(workers=workers)
+        console.print(f"Computed hashes for {hashed} folders.")
+
     output_file = generate_html_report(database, output_path=output, limit_per_section=limit)
     console.print(f"[green]Report generated:[/green] {output_file}")
 
