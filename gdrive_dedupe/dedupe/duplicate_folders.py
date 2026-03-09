@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 
 from gdrive_dedupe.storage.database import Database
@@ -155,3 +156,66 @@ def get_folder_subtree_stats(database: Database, folder_id: str) -> FolderSubtre
         file_count=int(row["file_count"]),
         total_size=int(row["total_size"]),
     )
+
+
+def compute_all_folder_subtree_stats(database: Database) -> dict[str, FolderSubtreeStats]:
+    folder_rows = database.execute("SELECT id, parent FROM folders").fetchall()
+    if not folder_rows:
+        return {}
+
+    parent_by_id: dict[str, str | None] = {}
+    pending_children: dict[str, int] = {}
+    total_folder_count: dict[str, int] = {}
+    total_file_count: dict[str, int] = {}
+    total_size: dict[str, int] = {}
+
+    for row in folder_rows:
+        folder_id = str(row["id"])
+        parent = str(row["parent"]) if row["parent"] is not None else None
+        parent_by_id[folder_id] = parent
+        pending_children[folder_id] = 0
+        total_folder_count[folder_id] = 1
+        total_file_count[folder_id] = 0
+        total_size[folder_id] = 0
+
+    for _folder_id, parent in parent_by_id.items():
+        if parent is not None and parent in pending_children:
+            pending_children[parent] += 1
+
+    file_rows = database.execute("""
+        SELECT parent, COUNT(*) AS file_count, COALESCE(SUM(size), 0) AS total_size
+        FROM files
+        WHERE parent IS NOT NULL
+        GROUP BY parent
+        """).fetchall()
+    for row in file_rows:
+        parent = str(row["parent"])
+        if parent not in total_file_count:
+            continue
+        total_file_count[parent] = int(row["file_count"])
+        total_size[parent] = int(row["total_size"])
+
+    queue: deque[str] = deque(
+        folder_id for folder_id, children in pending_children.items() if children == 0
+    )
+    while queue:
+        folder_id = queue.popleft()
+        parent = parent_by_id.get(folder_id)
+        if parent is None or parent not in pending_children:
+            continue
+
+        total_folder_count[parent] += total_folder_count[folder_id]
+        total_file_count[parent] += total_file_count[folder_id]
+        total_size[parent] += total_size[folder_id]
+        pending_children[parent] -= 1
+        if pending_children[parent] == 0:
+            queue.append(parent)
+
+    return {
+        folder_id: FolderSubtreeStats(
+            folder_count=total_folder_count[folder_id],
+            file_count=total_file_count[folder_id],
+            total_size=total_size[folder_id],
+        )
+        for folder_id in parent_by_id
+    }

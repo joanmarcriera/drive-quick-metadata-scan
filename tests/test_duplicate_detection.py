@@ -5,6 +5,7 @@ from gdrive_dedupe.dedupe.duplicate_files import (
     get_duplicate_file_groups,
 )
 from gdrive_dedupe.dedupe.duplicate_folders import (
+    compute_all_folder_subtree_stats,
     get_actionable_duplicate_root_groups,
     get_duplicate_folder_groups,
     get_folder_subtree_stats,
@@ -96,3 +97,8 @@ def test_actionable_root_groups_collapse_nested_duplicates(tmp_path: Path) -> No
     assert subtree.folder_count == 2
     assert subtree.file_count == 1
     assert subtree.total_size == 100
+
+    all_subtrees = compute_all_folder_subtree_stats(db)
+    assert all_subtrees["root_a"].folder_count == 2
+    assert all_subtrees["root_a"].file_count == 1
+    assert all_subtrees["root_a"].total_size == 100

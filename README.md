@@ -12,6 +12,7 @@ It detects both duplicate files and duplicate folder trees without downloading f
 - Supports resumable scans
 - Produces CLI tables and HTML reports with Google Drive links for manual review
 - Highlights actionable top-level duplicate root sets with keep-vs-review candidates
+- Visualizes largest folder trees, highest file-count folders, and `.git` hotspots
 
 ## Architecture
 
@@ -116,8 +117,10 @@ Recommended workflow:
 1. Run `gdrive-dedupe report --output report.html`
 2. Open the generated report in your browser
 3. Start with `Actionable Duplicate Roots` (top-level duplicate sets) to remove noise
-4. Use `Open file in Drive` / `Open folder in Drive` links to inspect duplicates
-5. Decide and delete manually in Google Drive UI
+4. Review `Folder Size Hotspots` and `File Count Hotspots` for high-impact cleanup
+5. Check `Repository Metadata Hotspots (.git)` for repo artifacts to remove
+6. Use `Open file in Drive` / `Open folder in Drive` links to inspect duplicates
+7. Decide and delete manually in Google Drive UI
 
 ## Database schema
 

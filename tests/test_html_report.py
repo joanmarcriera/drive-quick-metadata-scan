@@ -13,6 +13,8 @@ def test_html_report_includes_duplicate_folder_samples(tmp_path: Path) -> None:
             ("fa", None, "A"),
             ("fb", None, "B"),
             ("fc", None, "C"),
+            ("git1", "fa", ".git"),
+            ("git2", "fb", ".git"),
         ]
     )
     db.executemany(
@@ -24,6 +26,8 @@ def test_html_report_includes_duplicate_folder_samples(tmp_path: Path) -> None:
             ("f1", "dup.txt", "fa", 10, "md5dup", "text/plain"),
             ("f2", "dup.txt", "fb", 10, "md5dup", "text/plain"),
             ("f3", "dup.txt", "fc", 10, "md5dup", "text/plain"),
+            ("f4", "index", "git1", 5, "md5git1", "application/octet-stream"),
+            ("f5", "pack", "git2", 5, "md5git2", "application/octet-stream"),
         ]
     )
     db.commit()
@@ -44,6 +48,11 @@ def test_html_report_includes_duplicate_folder_samples(tmp_path: Path) -> None:
     assert "Actionable Duplicate Roots" in html
     assert "Keep:" in html
     assert "Review delete candidates:" in html
+    assert "Folder Size Hotspots" in html
+    assert "File Count Hotspots" in html
+    assert "Repository Metadata Hotspots (.git)" in html
+    assert "/A/.git" in html
+    assert "dup-root x3" in html
     assert "Duplicate folder trees" in html
     assert "example: A" in html
     assert "<code>fa</code> - /A - " in html
