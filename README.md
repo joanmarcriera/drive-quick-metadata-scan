@@ -129,6 +129,115 @@ Generate an HTML report with all candidate links for actionable duplicate roots:
 gdrive-dedupe report --output report.html --actionable-candidates 0
 ```
 
+## CLI options reference
+
+Full command tree:
+
+```bash
+gdrive-dedupe [OPTIONS] COMMAND [ARGS]...
+```
+
+Top-level options:
+
+- `--install-completion` Install completion for the current shell.
+- `--show-completion` Print completion script for the current shell.
+- `--help` Show help.
+
+Top-level commands:
+
+- `scan`
+- `report`
+- `stats`
+- `duplicates` (`files`, `folders`, `waste`)
+
+### `scan`
+
+```bash
+gdrive-dedupe scan [OPTIONS]
+```
+
+- `--db PATH` SQLite metadata DB path. Default: `~/.config/gdrive-dedupe/metadata.db`
+- `--credentials PATH` OAuth client JSON path. Default: `credentials.json`
+- `--query TEXT` Drive `files.list` filter. Default: `trashed = false`
+- `--drive-id TEXT` Optional shared drive ID.
+- `--resume / --no-resume` Resume from stored scan page token. Default: `--resume`
+- `--page-size INTEGER` Range `100..1000`. Default: `1000`
+- `--help`
+
+### `report`
+
+```bash
+gdrive-dedupe report [OPTIONS]
+```
+
+- `--db PATH` SQLite metadata DB path. Default: `~/.config/gdrive-dedupe/metadata.db`
+- `--output PATH` Output HTML path. Default: `report.html`
+- `--limit INTEGER` Max duplicate groups per section (`>=1`). Default: `100`
+- `--actionable-candidates INTEGER` Delete-candidate links per actionable root (`>=0`, `0 = all`). Default: `25`
+- `--recompute / --no-recompute` Recompute folder hashes before report. Default: `--recompute`
+- `--workers INTEGER` Hash worker threads (`1..16`). Default: `1`
+- `--help`
+
+### `stats`
+
+```bash
+gdrive-dedupe stats [OPTIONS]
+```
+
+- `--db PATH` SQLite metadata DB path. Default: `~/.config/gdrive-dedupe/metadata.db`
+- `--help`
+
+### `duplicates`
+
+```bash
+gdrive-dedupe duplicates [OPTIONS] COMMAND [ARGS]...
+```
+
+- `--help`
+
+Subcommands:
+
+- `files`
+- `folders`
+- `waste`
+
+### `duplicates files`
+
+```bash
+gdrive-dedupe duplicates files [OPTIONS]
+```
+
+- `--db PATH` SQLite metadata DB path. Default: `~/.config/gdrive-dedupe/metadata.db`
+- `--limit INTEGER` Max duplicate groups to display. Default: `50`
+- `--help`
+
+### `duplicates folders`
+
+```bash
+gdrive-dedupe duplicates folders [OPTIONS]
+```
+
+- `--db PATH` SQLite metadata DB path. Default: `~/.config/gdrive-dedupe/metadata.db`
+- `--recompute / --no-recompute` Recompute folder hashes before listing. Default: `--recompute`
+- `--workers INTEGER` Hash worker threads (`1..16`). Default: `1`
+- `--limit INTEGER` Max duplicate groups to display. Default: `50`
+- `--help`
+
+### `duplicates waste`
+
+```bash
+gdrive-dedupe duplicates waste [OPTIONS]
+```
+
+- `--db PATH` SQLite metadata DB path. Default: `~/.config/gdrive-dedupe/metadata.db`
+- `--recompute / --no-recompute` Recompute folder hashes before ranking reclaimable roots. Default: `--no-recompute`
+- `--workers INTEGER` Hash worker threads (`1..16`). Default: `1`
+- `--limit INTEGER` Rows to show (`>=1`). Default: `15`
+- `--offset INTEGER` Row offset for pagination (`>=0`). Default: `0`
+- `--min-reclaimable TEXT` Threshold like `500MB`, `2GB`, `0`. Default: `1MB`
+- `--sample-candidates INTEGER` Candidate folders per row (`1..10`). Default: `3`
+- `--help`
+
 ## Review workflow (no CLI deletion)
 
 `gdrive-dedupe` is intentionally non-destructive. It does not delete files/folders from the command line.
