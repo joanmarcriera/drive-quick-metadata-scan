@@ -6,12 +6,14 @@ from html import escape
 from pathlib import Path
 from typing import TypeAlias
 
-from gdrive_dedupe.dedupe.duplicate_files import get_duplicate_file_groups
+from gdrive_dedupe.dedupe.duplicate_files import FileRecord, get_duplicate_file_groups
 from gdrive_dedupe.dedupe.duplicate_folders import FolderRecord, get_duplicate_folder_groups
 from gdrive_dedupe.reports.stats import collect_stats
 from gdrive_dedupe.storage.database import Database
 
 FolderNode: TypeAlias = tuple[str, str | None, str]
+GOOGLE_DRIVE_FILE_URL = "https://drive.google.com/file/d/{item_id}/view"
+GOOGLE_DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/{item_id}"
 
 
 def format_bytes(num_bytes: int) -> str:
@@ -31,6 +33,7 @@ def generate_html_report(
     database: Database,
     output_path: str | Path,
     limit_per_section: int = 100,
+    file_samples_per_group: int = 8,
     folder_samples_per_group: int = 8,
 ) -> Path:
     stats = collect_stats(database)
@@ -43,19 +46,38 @@ def generate_html_report(
         f"{stats.duplicate_folder_groups} " f"({stats.duplicate_folder_items} folders)"
     )
 
-    file_groups_html = (
-        "\n".join(
-            (
-                f"<li><strong>{escape(group.md5)}</strong> "
-                f"({group.count} files, total {format_bytes(group.total_size)})</li>"
-            )
-            for group in duplicate_files
-        )
-        or "<li>No duplicate file groups detected.</li>"
-    )
-
     folder_cache: dict[str, FolderNode | None] = {}
     path_cache: dict[str, str] = {}
+    file_groups_html_parts: list[str] = []
+    for group in duplicate_files:
+        example_name = group.files[0].name if group.files else "-"
+        samples = group.files[:file_samples_per_group]
+        samples_html = "\n".join(
+            _render_file_sample(
+                database,
+                file_item,
+                folder_cache=folder_cache,
+                path_cache=path_cache,
+            )
+            for file_item in samples
+        )
+
+        remaining = group.count - len(samples)
+        remaining_html = ""
+        if remaining > 0:
+            remaining_html = f"<li>... and {remaining} more files in this group.</li>"
+
+        file_groups_html_parts.append(
+            f"<li><strong>{escape(group.md5)}</strong> "
+            f"({group.count} files, total {format_bytes(group.total_size)}, "
+            f"example: {escape(example_name)})"
+            f"<ul>{samples_html}{remaining_html}</ul></li>"
+        )
+
+    file_groups_html = (
+        "\n".join(file_groups_html_parts) or "<li>No duplicate file groups detected.</li>"
+    )
+
     folder_groups_html_parts: list[str] = []
     for group in duplicate_folders:
         example_name = group.folders[0].name if group.folders else "-"
@@ -145,7 +167,35 @@ def _render_folder_sample(
         folder_cache=folder_cache,
         path_cache=path_cache,
     )
-    return f"<li><code>{escape(folder.id)}</code> - {escape(path)}</li>"
+    return (
+        f"<li><code>{escape(folder.id)}</code> - {escape(path)} - "
+        f"{_external_link(_drive_folder_url(folder.id), 'Open folder in Drive')}</li>"
+    )
+
+
+def _render_file_sample(
+    database: Database,
+    file_item: FileRecord,
+    *,
+    folder_cache: dict[str, FolderNode | None],
+    path_cache: dict[str, str],
+) -> str:
+    parent_path = (
+        _resolve_folder_path(
+            database,
+            file_item.parent,
+            folder_cache=folder_cache,
+            path_cache=path_cache,
+        )
+        if file_item.parent
+        else ""
+    )
+    file_path = f"{parent_path}/{file_item.name}" if parent_path else f"/{file_item.name}"
+    size_text = format_bytes(file_item.size) if file_item.size is not None else "unknown size"
+    return (
+        f"<li><code>{escape(file_item.id)}</code> - {escape(file_path)} ({size_text}) - "
+        f"{_external_link(_drive_file_url(file_item.id), 'Open file in Drive')}</li>"
+    )
 
 
 def _resolve_folder_path(
@@ -212,3 +262,17 @@ def _get_folder_node(
     node: FolderNode = (str(row["id"]), row["parent"], str(row["name"]))
     folder_cache[folder_id] = node
     return node
+
+
+def _drive_file_url(item_id: str) -> str:
+    return GOOGLE_DRIVE_FILE_URL.format(item_id=item_id)
+
+
+def _drive_folder_url(item_id: str) -> str:
+    return GOOGLE_DRIVE_FOLDER_URL.format(item_id=item_id)
+
+
+def _external_link(url: str, label: str) -> str:
+    safe_url = escape(url, quote=True)
+    safe_label = escape(label)
+    return f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_label}</a>'
