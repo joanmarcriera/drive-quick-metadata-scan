@@ -138,7 +138,7 @@ def duplicates_waste(
     ] = "1MB",
     sample_candidates: Annotated[
         int, typer.Option(min=1, max=10, help="Candidate folders shown per row")
-    ] = 1,
+    ] = 3,
 ) -> None:
     database = Database(db)
     database.initialize()
@@ -166,9 +166,10 @@ def duplicates_waste(
     table.add_column("#", justify="right")
     table.add_column("Reclaimable", justify="right")
     table.add_column("Copies", justify="right")
+    table.add_column("Delete Cands", justify="right")
     table.add_column("Keep")
     table.add_column("Keep Link")
-    table.add_column("Review Candidate(s)")
+    table.add_column("Review Candidate Preview")
 
     for idx, recommendation in enumerate(recommendations, start=offset + 1):
         keep_path = _resolve_folder_path(recommendation.keep.id, folder_map, path_cache)
@@ -176,15 +177,20 @@ def duplicates_waste(
         keep_url = GOOGLE_DRIVE_FOLDER_URL.format(item_id=recommendation.keep.id)
 
         candidate_parts: list[str] = []
-        for candidate in recommendation.delete_candidates[:sample_candidates]:
+        sampled_candidates = recommendation.delete_candidates[:sample_candidates]
+        for candidate in sampled_candidates:
             candidate_path = _resolve_folder_path(candidate.id, folder_map, path_cache)
             candidate_parts.append(f"{candidate.id} - {candidate_path}")
+        remaining_candidates = len(recommendation.delete_candidates) - len(sampled_candidates)
+        if remaining_candidates > 0:
+            candidate_parts.append(f"... (+{remaining_candidates} more)")
         candidate_text = "\n".join(candidate_parts) if candidate_parts else "-"
 
         table.add_row(
             str(idx),
             format_bytes(recommendation.estimated_reclaimable_bytes),
             str(recommendation.copies),
+            str(len(recommendation.delete_candidates)),
             keep_desc,
             keep_url,
             candidate_text,
