@@ -23,11 +23,26 @@ Designed for large datasets (500k+ files, multi-TB drives):
 
 ## Installation
 
+Choose one workflow:
+
+### Option A: `pip` + `venv`
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pip install .
+```
+
+### Option B: `uv` (faster dependency management)
+
+Install `uv`: [https://docs.astral.sh/uv/](https://docs.astral.sh/uv/)
+
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+uv pip install -e .
 ```
 
 ## Google API and OAuth setup
@@ -143,10 +158,20 @@ Folders with identical hash values are duplicates of the same tree shape/content
 
 ## Development
 
+`pip` workflow:
+
 ```bash
 ruff check .
 black --check .
 pytest
+```
+
+`uv` workflow:
+
+```bash
+uv run ruff check .
+uv run black --check .
+uv run pytest
 ```
 
 CI runs lint, format checks, tests, and install validation.
