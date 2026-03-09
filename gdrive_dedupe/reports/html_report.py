@@ -46,10 +46,7 @@ def generate_html_report(
     stats = collect_stats(database)
     duplicate_files = get_duplicate_file_groups(database, limit=limit_per_section)
     duplicate_folders = get_duplicate_folder_groups(database, limit=limit_per_section)
-    actionable_root_groups = get_actionable_duplicate_root_groups(
-        database,
-        limit=limit_per_section,
-    )
+    actionable_root_groups = get_actionable_duplicate_root_groups(database, limit=None)
     duplicate_file_summary = (
         f"{stats.duplicate_file_groups} " f"({stats.duplicate_file_items} files)"
     )
@@ -126,6 +123,7 @@ def generate_html_report(
         path_cache=path_cache,
         subtree_stats_cache=subtree_stats_cache,
         sample_size=folder_samples_per_group,
+        max_groups=limit_per_section,
     )
     actionable_note = (
         "Nested duplicate folders are collapsed to top-level duplicate sets "
@@ -237,11 +235,12 @@ def _render_actionable_root_groups(
     path_cache: dict[str, str],
     subtree_stats_cache: dict[str, FolderSubtreeStats],
     sample_size: int,
+    max_groups: int | None,
 ) -> str:
     if not groups:
         return "<li>No actionable top-level duplicate root groups detected.</li>"
 
-    parts: list[str] = []
+    ranked_groups: list[tuple[int, ActionableDuplicateRootGroup, FolderRecord, str]] = []
     for group in groups:
         keep_folder = _choose_keep_candidate(
             database,
@@ -255,12 +254,28 @@ def _render_actionable_root_groups(
             folder_cache=folder_cache,
             path_cache=path_cache,
         )
-
         if keep_folder.id not in subtree_stats_cache:
             subtree_stats_cache[keep_folder.id] = get_folder_subtree_stats(database, keep_folder.id)
+
         subtree_stats = subtree_stats_cache[keep_folder.id]
         estimated_reclaimable = max(group.count - 1, 0) * subtree_stats.total_size
+        if estimated_reclaimable <= 0:
+            continue
 
+        ranked_groups.append((estimated_reclaimable, group, keep_folder, keep_path))
+
+    ranked_groups.sort(
+        key=lambda item: (item[0], item[1].count, len(item[3])),
+        reverse=True,
+    )
+    if max_groups is not None:
+        ranked_groups = ranked_groups[:max_groups]
+
+    if not ranked_groups:
+        return "<li>No actionable top-level duplicate root groups detected.</li>"
+
+    parts: list[str] = []
+    for estimated_reclaimable, group, keep_folder, keep_path in ranked_groups:
         delete_candidates = [folder for folder in group.folders if folder.id != keep_folder.id]
         sampled_delete_candidates = delete_candidates[:sample_size]
         delete_candidates_html = "\n".join(
