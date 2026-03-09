@@ -7,6 +7,7 @@ from gdrive_dedupe.dedupe.duplicate_files import (
 from gdrive_dedupe.dedupe.duplicate_folders import (
     compute_all_folder_subtree_stats,
     get_actionable_duplicate_root_groups,
+    get_actionable_root_recommendations,
     get_duplicate_folder_groups,
     get_folder_subtree_stats,
 )
@@ -102,3 +103,46 @@ def test_actionable_root_groups_collapse_nested_duplicates(tmp_path: Path) -> No
     assert all_subtrees["root_a"].folder_count == 2
     assert all_subtrees["root_a"].file_count == 1
     assert all_subtrees["root_a"].total_size == 100
+
+
+def test_actionable_recommendations_sorted_and_paginated(tmp_path: Path) -> None:
+    db = Database(tmp_path / "recommendations.db")
+    db.initialize()
+
+    db.upsert_folders(
+        [
+            ("r1a", None, "R1A"),
+            ("r1b", None, "R1B"),
+            ("r2a", None, "R2A"),
+            ("r2b", None, "R2B"),
+        ]
+    )
+    db.upsert_files(
+        [
+            ("fr1a", "big.bin", "r1a", 1000, "m1", "application/octet-stream"),
+            ("fr1b", "big.bin", "r1b", 1000, "m1", "application/octet-stream"),
+            ("fr2a", "small.bin", "r2a", 100, "m2", "application/octet-stream"),
+            ("fr2b", "small.bin", "r2b", 100, "m2", "application/octet-stream"),
+        ]
+    )
+    db.executemany(
+        "INSERT INTO folder_hash(folder_id, hash) VALUES(?, ?)",
+        [
+            ("r1a", "hash_big"),
+            ("r1b", "hash_big"),
+            ("r2a", "hash_small"),
+            ("r2b", "hash_small"),
+        ],
+    )
+    db.commit()
+
+    recs = get_actionable_root_recommendations(db, limit=10, offset=0, min_reclaimable_bytes=1)
+    assert len(recs) == 2
+    assert recs[0].hash_value == "hash_big"
+    assert recs[0].estimated_reclaimable_bytes == 1000
+    assert recs[1].hash_value == "hash_small"
+    assert recs[1].estimated_reclaimable_bytes == 100
+
+    page_2 = get_actionable_root_recommendations(db, limit=1, offset=1, min_reclaimable_bytes=1)
+    assert len(page_2) == 1
+    assert page_2[0].hash_value == "hash_small"

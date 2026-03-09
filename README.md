@@ -98,6 +98,7 @@ If you change scopes or OAuth client, delete that token file and authenticate ag
 gdrive-dedupe scan
 gdrive-dedupe duplicates files
 gdrive-dedupe duplicates folders
+gdrive-dedupe duplicates waste --limit 20 --offset 0
 gdrive-dedupe report --output report.html
 gdrive-dedupe stats
 ```
@@ -106,6 +107,20 @@ Optional shared-drive scan:
 
 ```bash
 gdrive-dedupe scan --drive-id <DRIVE_ID>
+```
+
+Largest duplicate waste first (then next page):
+
+```bash
+gdrive-dedupe duplicates waste --limit 20 --offset 0
+gdrive-dedupe duplicates waste --limit 20 --offset 20
+gdrive-dedupe duplicates waste --limit 20 --offset 40
+```
+
+Filter out small savings:
+
+```bash
+gdrive-dedupe duplicates waste --min-reclaimable 2GB --limit 20
 ```
 
 ## Review workflow (no CLI deletion)

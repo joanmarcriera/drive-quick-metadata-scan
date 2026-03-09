@@ -36,6 +36,16 @@ class FolderSubtreeStats:
     total_size: int
 
 
+@dataclass(slots=True)
+class ActionableRootRecommendation:
+    hash_value: str
+    copies: int
+    keep: FolderRecord
+    delete_candidates: list[FolderRecord]
+    subtree: FolderSubtreeStats
+    estimated_reclaimable_bytes: int
+
+
 def get_duplicate_folder_groups(
     database: Database, limit: int | None = None
 ) -> list[DuplicateFolderGroup]:
@@ -219,3 +229,86 @@ def compute_all_folder_subtree_stats(database: Database) -> dict[str, FolderSubt
         )
         for folder_id in parent_by_id
     }
+
+
+def get_actionable_root_recommendations(
+    database: Database,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+    min_reclaimable_bytes: int = 1,
+) -> list[ActionableRootRecommendation]:
+    root_groups = get_actionable_duplicate_root_groups(database, limit=None)
+    if not root_groups:
+        return []
+
+    subtree_stats_by_folder = compute_all_folder_subtree_stats(database)
+    parent_by_id = {
+        str(row["id"]): (str(row["parent"]) if row["parent"] is not None else None)
+        for row in database.execute("SELECT id, parent FROM folders").fetchall()
+    }
+
+    recommendations: list[ActionableRootRecommendation] = []
+    for group in root_groups:
+        keep = choose_keep_candidate(group.folders, parent_by_id=parent_by_id)
+        subtree = subtree_stats_by_folder.get(
+            keep.id,
+            FolderSubtreeStats(folder_count=0, file_count=0, total_size=0),
+        )
+        estimated_reclaimable = max(group.count - 1, 0) * subtree.total_size
+        if estimated_reclaimable < min_reclaimable_bytes:
+            continue
+
+        recommendations.append(
+            ActionableRootRecommendation(
+                hash_value=group.hash_value,
+                copies=group.count,
+                keep=keep,
+                delete_candidates=[f for f in group.folders if f.id != keep.id],
+                subtree=subtree,
+                estimated_reclaimable_bytes=estimated_reclaimable,
+            )
+        )
+
+    recommendations.sort(
+        key=lambda item: (
+            item.estimated_reclaimable_bytes,
+            item.copies,
+            item.subtree.file_count,
+        ),
+        reverse=True,
+    )
+
+    start = max(offset, 0)
+    if limit is None:
+        return recommendations[start:]
+    return recommendations[start : start + max(limit, 0)]
+
+
+def choose_keep_candidate(
+    folders: list[FolderRecord],
+    *,
+    parent_by_id: dict[str, str | None],
+) -> FolderRecord:
+    depth_cache: dict[str, int] = {}
+
+    def folder_depth(folder_id: str) -> int:
+        if folder_id in depth_cache:
+            return depth_cache[folder_id]
+        parent = parent_by_id.get(folder_id)
+        if parent is None or parent not in parent_by_id:
+            depth_cache[folder_id] = 1
+            return 1
+        depth_cache[folder_id] = 1 + folder_depth(parent)
+        return depth_cache[folder_id]
+
+    ranked = sorted(
+        folders,
+        key=lambda folder: (
+            folder_depth(folder.id),
+            len(folder.name),
+            folder.name.lower(),
+            folder.id,
+        ),
+    )
+    return ranked[0]
