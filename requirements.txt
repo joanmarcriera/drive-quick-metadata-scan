@@ -1,0 +1,11 @@
+black>=25.1.0
+google-api-python-client>=2.166.0
+google-auth>=2.38.0
+google-auth-oauthlib>=1.2.1
+networkx>=3.4.0
+orjson>=3.10.0
+pytest>=8.3.0
+rich>=13.9.0
+ruff>=0.11.0
+tqdm>=4.67.0
+typer>=0.15.0

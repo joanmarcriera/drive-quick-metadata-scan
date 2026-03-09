@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling>=1.24.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gdrive-dedupe"
+version = "0.1.0"
+description = "Metadata-only Google Drive duplicate file and folder detector"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+  { name = "gdrive-dedupe contributors" }
+]
+dependencies = [
+  "google-api-python-client>=2.166.0",
+  "google-auth>=2.38.0",
+  "google-auth-oauthlib>=1.2.1",
+  "orjson>=3.10.0",
+  "rich>=13.9.0",
+  "tqdm>=4.67.0",
+  "typer>=0.15.0",
+  "networkx>=3.4.0",
+]
+
+[project.scripts]
+gdrive-dedupe = "gdrive_dedupe.cli.app:main"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = []
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+pythonpath = ["."]
