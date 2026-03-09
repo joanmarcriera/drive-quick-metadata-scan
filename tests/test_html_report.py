@@ -41,6 +41,9 @@ def test_html_report_includes_duplicate_folder_samples(tmp_path: Path) -> None:
     assert "Open file in Drive" in html
     assert "https://drive.google.com/file/d/f1/view" in html
     assert "... and 1 more files in this group." in html
+    assert "Actionable Duplicate Roots" in html
+    assert "Keep:" in html
+    assert "Review delete candidates:" in html
     assert "Duplicate folder trees" in html
     assert "example: A" in html
     assert "<code>fa</code> - /A - " in html

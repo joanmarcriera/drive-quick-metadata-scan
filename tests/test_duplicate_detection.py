@@ -4,7 +4,11 @@ from gdrive_dedupe.dedupe.duplicate_files import (
     estimate_reclaimable_bytes,
     get_duplicate_file_groups,
 )
-from gdrive_dedupe.dedupe.duplicate_folders import get_duplicate_folder_groups
+from gdrive_dedupe.dedupe.duplicate_folders import (
+    get_actionable_duplicate_root_groups,
+    get_duplicate_folder_groups,
+    get_folder_subtree_stats,
+)
 from gdrive_dedupe.storage.database import Database
 
 
@@ -52,3 +56,43 @@ def test_duplicate_folders_grouping(tmp_path: Path) -> None:
     assert groups[0].hash_value == "h1"
     assert groups[0].count == 2
     assert {f.id for f in groups[0].folders} == {"a", "b"}
+
+
+def test_actionable_root_groups_collapse_nested_duplicates(tmp_path: Path) -> None:
+    db = Database(tmp_path / "actionable_roots.db")
+    db.initialize()
+
+    db.upsert_folders(
+        [
+            ("root_a", None, "root_a"),
+            ("child_a", "root_a", "child"),
+            ("root_b", None, "root_b"),
+            ("child_b", "root_b", "child"),
+        ]
+    )
+    db.upsert_files(
+        [
+            ("f1", "file.txt", "child_a", 100, "md5x", "text/plain"),
+            ("f2", "file.txt", "child_b", 100, "md5x", "text/plain"),
+        ]
+    )
+    db.executemany(
+        "INSERT INTO folder_hash(folder_id, hash) VALUES(?, ?)",
+        [
+            ("root_a", "hash_root"),
+            ("root_b", "hash_root"),
+            ("child_a", "hash_child"),
+            ("child_b", "hash_child"),
+        ],
+    )
+    db.commit()
+
+    groups = get_actionable_duplicate_root_groups(db)
+    assert len(groups) == 1
+    assert groups[0].hash_value == "hash_root"
+    assert {folder.id for folder in groups[0].folders} == {"root_a", "root_b"}
+
+    subtree = get_folder_subtree_stats(db, "root_a")
+    assert subtree.folder_count == 2
+    assert subtree.file_count == 1
+    assert subtree.total_size == 100

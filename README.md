@@ -11,6 +11,7 @@ It detects both duplicate files and duplicate folder trees without downloading f
 - Detects duplicate folders via deterministic bottom-up tree hashing
 - Supports resumable scans
 - Produces CLI tables and HTML reports with Google Drive links for manual review
+- Highlights actionable top-level duplicate root sets with keep-vs-review candidates
 
 ## Architecture
 
@@ -114,8 +115,9 @@ Recommended workflow:
 
 1. Run `gdrive-dedupe report --output report.html`
 2. Open the generated report in your browser
-3. Use `Open file in Drive` / `Open folder in Drive` links to inspect duplicates
-4. Decide and delete manually in Google Drive UI
+3. Start with `Actionable Duplicate Roots` (top-level duplicate sets) to remove noise
+4. Use `Open file in Drive` / `Open folder in Drive` links to inspect duplicates
+5. Decide and delete manually in Google Drive UI
 
 ## Database schema
 

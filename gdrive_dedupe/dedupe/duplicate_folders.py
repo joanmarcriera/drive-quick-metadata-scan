@@ -21,6 +21,20 @@ class DuplicateFolderGroup:
     folders: list[FolderRecord]
 
 
+@dataclass(slots=True)
+class ActionableDuplicateRootGroup:
+    hash_value: str
+    count: int
+    folders: list[FolderRecord]
+
+
+@dataclass(slots=True)
+class FolderSubtreeStats:
+    folder_count: int
+    file_count: int
+    total_size: int
+
+
 def get_duplicate_folder_groups(
     database: Database, limit: int | None = None
 ) -> list[DuplicateFolderGroup]:
@@ -56,3 +70,88 @@ def get_duplicate_folder_groups(
         )
 
     return groups
+
+
+def get_actionable_duplicate_root_groups(
+    database: Database, limit: int | None = None
+) -> list[ActionableDuplicateRootGroup]:
+    rows = database.execute("""
+        SELECT fh.hash AS hash_value, f.id, f.name, f.parent
+        FROM folder_hash AS fh
+        JOIN folders AS f ON f.id = fh.folder_id
+        JOIN (
+            SELECT hash
+            FROM folder_hash
+            GROUP BY hash
+            HAVING COUNT(*) > 1
+        ) AS dup ON dup.hash = fh.hash
+        ORDER BY fh.hash, f.parent, f.name
+        """).fetchall()
+
+    if not rows:
+        return []
+
+    members_by_hash: dict[str, list[FolderRecord]] = {}
+    duplicate_ids: set[str] = set()
+    for row in rows:
+        folder = FolderRecord(
+            id=str(row["id"]),
+            name=str(row["name"]),
+            parent=row["parent"],
+        )
+        hash_value = str(row["hash_value"])
+        members_by_hash.setdefault(hash_value, []).append(folder)
+        duplicate_ids.add(folder.id)
+
+    actionable_groups: list[ActionableDuplicateRootGroup] = []
+    for hash_value, members in members_by_hash.items():
+        # Collapse nested duplicate noise: keep only folders whose parent is not
+        # itself part of any duplicate folder group.
+        top_level_members = [folder for folder in members if folder.parent not in duplicate_ids]
+        if len(top_level_members) < 2:
+            continue
+
+        actionable_groups.append(
+            ActionableDuplicateRootGroup(
+                hash_value=hash_value,
+                count=len(top_level_members),
+                folders=top_level_members,
+            )
+        )
+
+    actionable_groups.sort(key=lambda group: group.count, reverse=True)
+    if limit is not None:
+        return actionable_groups[: int(limit)]
+    return actionable_groups
+
+
+def get_folder_subtree_stats(database: Database, folder_id: str) -> FolderSubtreeStats:
+    row = database.execute(
+        """
+        WITH RECURSIVE subtree(id) AS (
+            SELECT ?
+            UNION
+            SELECT f.id
+            FROM folders AS f
+            JOIN subtree AS s ON f.parent = s.id
+        )
+        SELECT
+            (SELECT COUNT(*) FROM subtree) AS folder_count,
+            (SELECT COUNT(*) FROM files WHERE parent IN (SELECT id FROM subtree)) AS file_count,
+            (
+                SELECT COALESCE(SUM(size), 0)
+                FROM files
+                WHERE size IS NOT NULL AND parent IN (SELECT id FROM subtree)
+            ) AS total_size
+        """,
+        (folder_id,),
+    ).fetchone()
+
+    if row is None:
+        return FolderSubtreeStats(folder_count=0, file_count=0, total_size=0)
+
+    return FolderSubtreeStats(
+        folder_count=int(row["folder_count"]),
+        file_count=int(row["file_count"]),
+        total_size=int(row["total_size"]),
+    )
